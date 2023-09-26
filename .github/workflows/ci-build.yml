@@ -28,7 +28,7 @@ jobs:
 
       - name: Assemble
         run: |
-          ./gradlew -i iceaxe-core:showTsubakuroManifest clean assemble
+          ./gradlew -i iceaxe-dbtest:showTsubakuroManifest clean assemble
 
       - name: Check
         run: |

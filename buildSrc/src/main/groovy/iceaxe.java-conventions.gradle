@@ -8,11 +8,6 @@ plugins {
 group = 'com.tsurugidb.iceaxe'
 version = '1.0.0-SNAPSHOT'
 
-ext {
-    tsubakuroVersion = '1.0.0-SNAPSHOT'
-    isReleaseVersion = !version.endsWith("SNAPSHOT")
-}
-
 if (hasProperty('mavenLocal')) {
     repositories {
         mavenLocal()
@@ -66,9 +61,9 @@ spotbugsMain {
     }
 }
 
-checkstyleMain.enabled = false
+checkstyleMain.enabled = true
 checkstyleTest.enabled = false
-spotbugsMain.enabled = false
+spotbugsMain.enabled = true
 spotbugsTest.enabled = false
 
 javadoc.failOnError = false
