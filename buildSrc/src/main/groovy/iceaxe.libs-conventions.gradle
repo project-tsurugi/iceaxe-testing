@@ -1,0 +1,8 @@
+plugins {
+    id 'java-library'
+
+    id 'iceaxe.java-conventions'
+}
+
+checkstyleMain.enabled = true
+spotbugsMain.enabled = true

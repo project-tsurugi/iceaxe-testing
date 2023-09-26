@@ -1,0 +1,8 @@
+rootProject.name = 'iceaxe-testing'
+
+include 'iceaxe-dbtest'
+
+rootProject.children.each { project ->
+    project.projectDir = new File(settingsDir, "modules/${project.name}")
+    assert project.projectDir.isDirectory()
+}

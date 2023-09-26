@@ -1,0 +1,17 @@
+plugins {
+    id 'iceaxe.libs-conventions'
+}
+
+dependencies {
+    implementation 'com.tsurugidb.iceaxe:iceaxe-core:1.0.0-SNAPSHOT'
+}
+
+components.java.withVariantsFromConfiguration(configurations.apiElements) {
+    skip()
+}
+components.java.withVariantsFromConfiguration(configurations.runtimeElements) {
+    skip()
+}
+components.java.withVariantsFromConfiguration(configurations.sourcesElements) {
+    skip()
+}
