@@ -27,7 +27,7 @@ import com.tsurugidb.iceaxe.transaction.TsurugiTransaction;
 public class StepDefs extends DbTestTableTester {
     private class TxState {
         public final TsurugiTransaction tx;
-        public Future<?> commitDone = null;
+        public Future<Exception> commitDone = null;
         public TxState(TsurugiTransaction tx) { this.tx = tx; }
     }
     Map<String, TxState> txs = new HashMap<>();
@@ -38,7 +38,7 @@ public class StepDefs extends DbTestTableTester {
         }
         return txst.tx;
     }
-    private void setTxCommitDone(String txName, Future<?> commitDone) {
+    private void setTxCommitDone(String txName, Future<Exception> commitDone) {
         var txst = txs.get(txName);
         if (txst == null) {
             throw new IllegalStateException("transaction " + txName + " is not defined");
@@ -76,7 +76,6 @@ public class StepDefs extends DbTestTableTester {
     }
     @After
     public void after() throws Exception {
-        System.err.println("after");
         for (var e : txs.entrySet()) {
             var txst = e.getValue();
             System.err.println(e.getKey() + " discard");
@@ -84,6 +83,7 @@ public class StepDefs extends DbTestTableTester {
                 txst.commitDone.get();
             } else {
                 txst.tx.rollback();
+                txst.tx.close();
             }
         }
         txs.clear();
@@ -129,7 +129,9 @@ public class StepDefs extends DbTestTableTester {
         } catch (TsurugiTransactionException ex) {
             fail(txName + " COMMIT FAILED", ex);
             return;
-        };
+        } finally {
+            tx.close();
+        }
     }
     @Given("{word}: COMMIT/commit WILL/will FAIL/fail")
     public void commit_fail(String txName) throws Exception {
@@ -140,19 +142,62 @@ public class StepDefs extends DbTestTableTester {
             tx.commit(TgCommitType.DEFAULT);
         } catch (TsurugiTransactionException ex) {
             return;
-        };
+        } finally {
+            tx.close();
+        }
         fail(txName + " COMMIT SUCCESSED");
     }
-    @Given("{word}: COMMIT/commit WILL WAITING")
+    @Given("{word}: COMMIT/commit WILL/will WAITING/waiting")
     public void commit_waiting(String txName) {
         System.err.println(txName + " COMMIT WAITING");
         var tx = getTx(txName);
         var future = executeFuture(() -> {
-            tx.commit(TgCommitType.DEFAULT);
+            try {
+                tx.commit(TgCommitType.DEFAULT);
+            } catch (Exception ex) {
+                return ex;
+            }
             return null;
         });
         setTxCommitDone(txName, future);
-        
+    }
+
+    @Given("{word}: commit-wait returns ok")
+    public void commit_wait_returns_ok(String txName) {
+        System.err.println(txName + " COMMIT-WAIT OK");
+        var txst = txs.get(txName);
+        txs.remove(txName);
+        if (!txst.commitDone.isDone()) {
+            fail();
+        }
+        try {
+            Exception res = txst.commitDone.get();
+            if (res != null)
+                fail("COMMIT-WAIT FAIL", res);
+        } catch (Exception ex) {
+            fail("interrupted", ex);
+        }
+    }
+
+    @Given("{word}: commit-wait returns fail")
+    public void commit_wait_returns_fail(String txName) {
+        System.err.println(txName + " COMMIT-WAIT FAIL");
+        var txst = txs.get(txName);
+        txs.remove(txName);
+        if (!txst.commitDone.isDone()) {
+            try {
+                Thread.sleep(40);
+            } catch (InterruptedException ex) {}
+            if (!txst.commitDone.isDone())
+                fail();
+        }
+        try {
+            Exception res = txst.commitDone.get();
+            if (res == null)
+                fail("COMMIT-WAIT OK");
+        } catch (Exception ex) {
+            fail("interrupted", ex);
+        }
     }
 
     // this issue
@@ -163,18 +208,37 @@ public class StepDefs extends DbTestTableTester {
         var sql = getSession().createQuery("SELECT COUNT(*) FROM " + TEST);
         tx.executeQuery(sql);
     }
-    @Given("{word}: read {word}-{word}")
+    @Given("^([A-Za-z0-9]+): read ([A-Z]?)-([A-Z]?)$")
     public void read_range(String txName, String l, String r) throws Exception {
         System.err.println(txName + " READ RANGE " + l + "-" + r);
-        if (!l.matches("^[A-Z]$")) throw new IllegalArgumentException("left:" + l + " is invalid");
-        if (!r.matches("^[A-Z]$")) throw new IllegalArgumentException("right:" + r + " is invalid");
+        String pred;
+        if ("".equals(l)) {
+            if ("".equals(r)) {
+                throw new IllegalArgumentException("use read full for full scan");
+            }
+            pred = "WHERE pk <= '" + r + "'";
+        } else {
+            if ("".equals(r)) {
+                pred = " WHERE '" + l + "' <= pk";
+            } else {
+                pred = " WHERE '" + l + "' <= pk AND pk <= '" + r + "'";
+            }
+        }
+        var tx = getTx(txName);
+        var sql = getSession().createQuery("SELECT COUNT(*) FROM " + TEST + " " + pred);
+        tx.executeQuery(sql);
+    }
+    @Given("^([A-Za-z0-9]+): read ([A-Z])$")
+    public void read_point(String txName, String key) throws Exception {
+        System.err.println(txName + " READ POINT " + key);
+        if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
         var sql = getSession().createQuery(
-            "SELECT COUNT(*) FROM " + TEST + " WHERE '" + l + "' <= pk AND pk <= '" + l + "'"
+            "SELECT COUNT(*) FROM " + TEST + " WHERE pk = '" + key + "'"
             );
         tx.executeQuery(sql);
     }
-    @Given("{word}: write insert {word}")
+    @Given("{word}: (write )insert {word}")
     public void write_insert(String txName, String key) throws Exception {
         System.err.println(txName + " INSERT " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
@@ -184,7 +248,7 @@ public class StepDefs extends DbTestTableTester {
             );
         tx.executeStatement(sql);
     }
-    @Given("{word}: write upsert {word}")
+    @Given("{word}: (write )upsert {word}")
     public void write_upsert(String txName, String key) throws Exception {
         System.err.println(txName + " INSERT " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
@@ -194,7 +258,17 @@ public class StepDefs extends DbTestTableTester {
             );
         tx.executeStatement(sql);
     }
-    @Given("{word}: write delete {word}")
+    @Given("{word}: (write )update {word}")
+    public void write_update(String txName, String key) throws Exception {
+        System.err.println(txName + " INSERT " + key);
+        if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
+        var tx = getTx(txName);
+        var sql = getSession().createStatement(
+            "UPDATE " + TEST + " SET val = " + key + txName.substring(txName.length() - 1, txName.length()) + "' WHERE pk = '" + key + "'"
+            );
+        tx.executeStatement(sql);
+    }
+    @Given("{word}: (write )delete {word}")
     public void write_delete(String txName, String key) throws Exception {
         System.err.println(txName + " DELETE " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
@@ -204,17 +278,21 @@ public class StepDefs extends DbTestTableTester {
             );
         tx.executeStatement(sql);
     }
-    @Given("prepare THE table with data: {}")
+    @Given("prepare THE table with data:{}")
     public void prepare_table(String data) throws Exception {
         System.err.println("PREPARE TABLE " + data);
         var tx = getSession().createTransaction(TgTxOption.ofOCC());
+        var sql = getSession().createStatement("DELETE FROM " + TEST);
+        tx.executeStatement(sql);
         for (int i = 0; i < data.length(); i++) {
             char c = data.charAt(i);
             if ('A' <= c && c <= 'Z') {
-                var sql = getSession().createStatement(
+                sql = getSession().createStatement(
                     "INSERT OR REPLACE INTO " + TEST + "(pk, val) VALUES('" + c + "', '" + c + "0')"
                     );
                 tx.executeStatement(sql);
+            } else if (c == ' ') {
+                // skip
             } else {
                 System.err.println("invalid key:" + c);
             }
