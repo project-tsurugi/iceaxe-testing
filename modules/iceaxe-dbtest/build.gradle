@@ -5,9 +5,14 @@ plugins {
 dependencies {
     implementation 'com.tsurugidb.iceaxe:iceaxe-core:1.1.0-SNAPSHOT'
     testImplementation "ch.qos.logback:logback-classic:1.2.3"
+    testImplementation "io.cucumber:cucumber-java:7.14.0"
+    testImplementation "io.cucumber:cucumber-junit-platform-engine:7.14.0"
+    testImplementation "org.junit.platform:junit-platform-suite"
+    testImplementation "org.junit.jupiter:junit-jupiter"
 }
 
 tasks.named('test') {
+    useJUnitPlatform()
     systemProperty 'tsurugi.dbtest.endpoint', findProperty('dbtest.endpoint') ?: 'tcp://localhost:12345'
     systemProperty 'com.tsurugidb.tsubakuro.jniverify', 'false'
 }
