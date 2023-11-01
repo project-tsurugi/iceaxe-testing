@@ -12,7 +12,9 @@ import org.junit.platform.suite.api.SelectClasspathResource;
 //          cucumber.filter.tags シナリオについているタグによる絞り込み
 //          cucumber.filter.name シナリオ名による絞り込み
 //  see: https://github.com/cucumber/cucumber-jvm/tree/main/cucumber-junit-platform-engine#configuration-options
-//   動かず: -Dcucumber.features=com/tsurugidb/iceaxe/test/scenario/issue378.feature
+
+//  * filter で skip したやつが、いちいち SKIPPED と出て大量に流れるので煩わしい
+//  * -Dcucumber.features=com/tsurugidb/iceaxe/test/scenario/issue378.feature と書いてみたが機能しない。正しい書き方はどうするものなのか?
 
 @Suite
 @IncludeEngines("cucumber")

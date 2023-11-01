@@ -70,13 +70,13 @@ public class StepDefs extends DbTestTableTester {
             return new ScanRange(new ScanEndPoint(false, str.substring(0, 1)), null);
         } else if (str.matches("-[A-Z]")) {
             return new ScanRange(null, new ScanEndPoint(false, str.substring(1, 2)));
-        } else if (str.matches("\\[(][A-Z][-,:][A-Z][\\])]")) {
+        } else if (str.matches("[\\[(][A-Z][-,:][A-Z][\\])]")) {
             return new ScanRange(new ScanEndPoint(str.charAt(0) == '(', str.substring(1, 2)),
                                  new ScanEndPoint(str.charAt(4) == ')', str.substring(3, 4)));
-        } else if (str.matches("\\[(]-?inf[-,:][A-Z][\\])]")) {
+        } else if (str.matches("[\\[(]-?inf[-,:][A-Z][\\])]")) {
             int n = str.length();
             return new ScanRange(null, new ScanEndPoint(str.charAt(n-1) == ')', str.substring(n-2, n-1)));
-        } else if (str.matches("\\[(][A-Z][-,:]\\+?inf[\\])]")) {
+        } else if (str.matches("[\\[(][A-Z][-,:]\\+?inf[\\])]")) {
             return new ScanRange(new ScanEndPoint(str.charAt(0) == '(', str.substring(1, 2)), null);
         }
         throw new IllegalStateException("never reached");
@@ -89,6 +89,19 @@ public class StepDefs extends DbTestTableTester {
         @Override public String toString() {
             return (l == null ? "[-inf" : ((l.open ? "(" : "[") + l.point)) + ":"
                  + (r == null ? "+inf]" : (r.point + (r.open ? ")" : "]")));
+        }
+        String pred(String colName) {
+            String predL = l == null ? null : ("'" + l.point + "' " + (l.open ? "<" : "<=") + " " + colName);
+            String predR = r == null ? null : (colName + " " + (r.open ? "<" : "<=") + " '" + r.point + "'");
+            if (predL == null && predR == null) {
+                return "";
+            } else if (predL == null) {
+                return " WHERE " + predR;
+            } else if (predR == null) {
+                return " WHERE " + predL;
+            } else {
+                return " WHERE " + predL + " AND " + predR;
+            }
         }
     }
     public static class ScanEndPoint {
@@ -183,11 +196,12 @@ public class StepDefs extends DbTestTableTester {
     public void start_short_transaction(String txName) throws Exception {
         startTransaction(txName, TgTxOption.ofOCC().label(txName));
     }
+
     @Given("{txName}: COMMIT/commit")
     public void commit_ok0(String txName) throws Exception {
         commit_ok(txName);
     }
-    @Given("{txName}: COMMIT/commit WILL/will OK/ok/SUCCESS/success")
+    @Given("{txName}: commit will ok/success")
     public void commit_ok(String txName) throws Exception {
         var tx = getTx(txName);
         System.err.println(txName + " COMMIT OK");
@@ -201,7 +215,7 @@ public class StepDefs extends DbTestTableTester {
             tx.close();
         }
     }
-    @Given("{txName}: COMMIT/commit WILL/will FAIL/fail")
+    @Given("{txName}: commit will fail")
     public void commit_fail(String txName) throws Exception {
         var tx = getTx(txName);
         System.err.println(txName + " COMMIT FAIL");
@@ -215,7 +229,7 @@ public class StepDefs extends DbTestTableTester {
         }
         fail(txName + " COMMIT SUCCESSED");
     }
-    @Given("{txName}: COMMIT/commit WILL/will WAITING/waiting")
+    @Given("{txName}: commit will waiting")
     public void commit_waiting(String txName) {
         System.err.println(txName + " COMMIT WAITING");
         var tx = getTx(txName);
@@ -267,7 +281,8 @@ public class StepDefs extends DbTestTableTester {
             fail("interrupted", ex);
         }
     }
-    @Given("{txName}: abort")
+
+    @Given("{txName}: abort/rollback")
     public void abort(String txName) throws Exception {
         System.err.println(txName + " ABORT");
         var tx = getTx(txName);
@@ -279,20 +294,8 @@ public class StepDefs extends DbTestTableTester {
     @Given("{txName}: read {range}")
     public void read_range(String txName, ScanRange range) throws Exception {
         System.err.println(txName + " READ RANGE " + range);
-        String predL = range.l == null ? null : (" '" + range.l.point + "' " + (range.l.open ? "<" : "<=") + " pk");
-        String predR = range.r == null ? null : (" pk " + (range.r.open ? "<" : "<=") + " '" + range.r.point + "'");
-        String pred;
-        if (predL == null && predR == null) {
-            pred = "";
-        } else if (predL == null) {
-            pred = " WHERE" + predR;
-        } else if (predR == null) {
-            pred = " WHERE" + predL;
-        } else {
-            pred = " WHERE" + predL + " AND" + predR;
-        }
         var tx = getTx(txName);
-        executeQuery(tx, "SELECT COUNT(*) FROM " + TEST + pred);
+        executeQuery(tx, "SELECT COUNT(*) FROM " + TEST + range.pred("pk"));
     }
     @Given("{txName}: read {key}")
     public void read_point(String txName, String key) throws Exception {
@@ -327,6 +330,12 @@ public class StepDefs extends DbTestTableTester {
         System.err.println(txName + " DELETE " + key);
         var tx = getTx(txName);
         executeStatement(tx, "DELETE FROM " + TEST + " WHERE pk = '" + key + "'");
+    }
+    @Given("{txName}: (write )delete {range}")
+    public void write_delete_range(String txName, ScanRange range) throws Exception {
+        System.err.println(txName + " DELETE " + range);
+        var tx = getTx(txName);
+        executeStatement(tx, "DELETE FROM " + TEST + range.pred("pk"));
     }
     @Given("prepare THE empty table")
     public void prepare_the_empty_table() throws Exception {
