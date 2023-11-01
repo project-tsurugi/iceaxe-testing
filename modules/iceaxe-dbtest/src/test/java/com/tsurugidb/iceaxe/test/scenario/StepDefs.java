@@ -4,9 +4,12 @@ import java.io.IOException;
 import java.util.concurrent.Future;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.TestInfo;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -17,6 +20,7 @@ import io.cucumber.java.Before;
 import io.cucumber.java.BeforeAll;
 import io.cucumber.java.Scenario;
 import io.cucumber.java.en.Given;
+import io.cucumber.java.ParameterType;
 
 import com.tsurugidb.iceaxe.sql.result.TsurugiQueryResult;
 import com.tsurugidb.iceaxe.sql.result.TsurugiStatementResult;
@@ -48,7 +52,50 @@ public class StepDefs extends DbTestTableTester {
         txst.commitDone = commitDone;
     }
 
-    String defaultTbl = null;
+    @ParameterType("[A-Za-z0-9]+") public String txName(String str) { return str; }
+    @ParameterType("[A-Z]") public String key(String str) { return str; }
+    @ParameterType("[A-Z ]*")
+    public List<String> dataset(String str) {
+        return Stream.of(str.split("")).filter( s -> !" ".equals(s)).collect(Collectors.toList());
+    }
+    // full scan:          "full"
+    // simple close range: "A-Z", "A-", "-Z"
+    // full range:         "(A:Z)", "[A-inf]"
+    @ParameterType("full|[A-Z]?-[A-Z]?|[\\[(](?:[A-Z]|-?inf)[-,:](?:[A-Z]|\\+?inf)[\\])]")
+    public ScanRange range(String str) {
+        if ("full".equals(str)) return new ScanRange(null, null);
+        if (str.matches("[A-Z]-[A-Z]")) {
+            return new ScanRange(new ScanEndPoint(false, str.substring(0, 1)), new ScanEndPoint(false, str.substring(2, 3)));
+        } else if (str.matches("[A-Z]-")) {
+            return new ScanRange(new ScanEndPoint(false, str.substring(0, 1)), null);
+        } else if (str.matches("-[A-Z]")) {
+            return new ScanRange(null, new ScanEndPoint(false, str.substring(1, 2)));
+        } else if (str.matches("\\[(][A-Z][-,:][A-Z][\\])]")) {
+            return new ScanRange(new ScanEndPoint(str.charAt(0) == '(', str.substring(1, 2)),
+                                 new ScanEndPoint(str.charAt(4) == ')', str.substring(3, 4)));
+        } else if (str.matches("\\[(]-?inf[-,:][A-Z][\\])]")) {
+            int n = str.length();
+            return new ScanRange(null, new ScanEndPoint(str.charAt(n-1) == ')', str.substring(n-2, n-1)));
+        } else if (str.matches("\\[(][A-Z][-,:]\\+?inf[\\])]")) {
+            return new ScanRange(new ScanEndPoint(str.charAt(0) == '(', str.substring(1, 2)), null);
+        }
+        throw new IllegalStateException("never reached");
+    }
+
+    public static class ScanRange {
+        final ScanEndPoint l;
+        final ScanEndPoint r;
+        ScanRange(ScanEndPoint l, ScanEndPoint r) { this.l = l; this.r = r; }
+        @Override public String toString() {
+            return (l == null ? "[-inf" : ((l.open ? "(" : "[") + l.point)) + ":"
+                 + (r == null ? "+inf]" : (r.point + (r.open ? ")" : "]")));
+        }
+    }
+    public static class ScanEndPoint {
+        final boolean open;
+        final String point;
+        ScanEndPoint(boolean open, String point) { this.open = open; this.point = point;}
+    }
 
     @Before(order = 100)
     public void setUp(Scenario scenario) throws Exception {
@@ -118,21 +165,29 @@ public class StepDefs extends DbTestTableTester {
         txs.put(txName, new TxState(tx));
     }
 
-    public void setDefaultTable(String tblName) {
-        System.err.println("set default table " + tblName);
-        defaultTbl = tblName;
-    }
+    // public void setDefaultTable(String tblName) {
+    //     System.err.println("set default table " + tblName);
+    //     defaultTbl = tblName;
+    // }
 
     // SQL
-    @Given("{word}: BEGIN/begin/START/start LTX/ltx/LONG/long")
+    @Given("{txName}: BEGIN/begin/START/start LTX/ltx/LONG/long")
     public void start_long_transaction(String txName) throws Exception {
         startTransaction(txName, TgTxOption.ofLTX(TEST).label(txName));
     }
-    @Given("{word}: COMMIT/commit")
+    @Given("{txName}: BEGIN/begin/START/start")
+    public void start_default_transaction(String txName) throws Exception {
+        startTransaction(txName, TgTxOption.ofOCC().label(txName));
+    }
+    @Given("{txName}: BEGIN/begin/START/start OCC/occ/SHORT/short")
+    public void start_short_transaction(String txName) throws Exception {
+        startTransaction(txName, TgTxOption.ofOCC().label(txName));
+    }
+    @Given("{txName}: COMMIT/commit")
     public void commit_ok0(String txName) throws Exception {
         commit_ok(txName);
     }
-    @Given("{word}: COMMIT/commit WILL/will OK/ok/SUCCESS/success")
+    @Given("{txName}: COMMIT/commit WILL/will OK/ok/SUCCESS/success")
     public void commit_ok(String txName) throws Exception {
         var tx = getTx(txName);
         System.err.println(txName + " COMMIT OK");
@@ -146,7 +201,7 @@ public class StepDefs extends DbTestTableTester {
             tx.close();
         }
     }
-    @Given("{word}: COMMIT/commit WILL/will FAIL/fail")
+    @Given("{txName}: COMMIT/commit WILL/will FAIL/fail")
     public void commit_fail(String txName) throws Exception {
         var tx = getTx(txName);
         System.err.println(txName + " COMMIT FAIL");
@@ -160,7 +215,7 @@ public class StepDefs extends DbTestTableTester {
         }
         fail(txName + " COMMIT SUCCESSED");
     }
-    @Given("{word}: COMMIT/commit WILL/will WAITING/waiting")
+    @Given("{txName}: COMMIT/commit WILL/will WAITING/waiting")
     public void commit_waiting(String txName) {
         System.err.println(txName + " COMMIT WAITING");
         var tx = getTx(txName);
@@ -175,7 +230,7 @@ public class StepDefs extends DbTestTableTester {
         setTxCommitDone(txName, future);
     }
 
-    @Given("{word}: commit-wait returns ok")
+    @Given("{txName}: commit-wait returns ok")
     public void commit_wait_returns_ok(String txName) {
         System.err.println(txName + " COMMIT-WAIT OK");
         var txst = txs.get(txName);
@@ -192,7 +247,7 @@ public class StepDefs extends DbTestTableTester {
         }
     }
 
-    @Given("{word}: commit-wait returns fail")
+    @Given("{txName}: commit-wait returns fail")
     public void commit_wait_returns_fail(String txName) {
         System.err.println(txName + " COMMIT-WAIT FAIL");
         var txst = txs.get(txName);
@@ -212,26 +267,23 @@ public class StepDefs extends DbTestTableTester {
             fail("interrupted", ex);
         }
     }
-
-    // key: [A-Z]
-    // txName: [A-Za-z0-9]+
-    // range: full|[\[(]([A-Z]|-?inf)[-,:]([A-Z]|\+?inf[\])]|[A-Z]?-[A-Z]?
+    @Given("{txName}: abort")
+    public void abort(String txName) throws Exception {
+        System.err.println(txName + " ABORT");
+        var tx = getTx(txName);
+        txs.remove(txName);
+        tx.rollback();
+    }
 
     // this issue
-    @Given("{word}: read full")
-    public void read_full(String txName) throws Exception {
-        System.err.println(txName + " READ FULL");
-        var tx = getTx(txName);
-        executeQuery(tx, "SELECT COUNT(*) FROM " + TEST);
-    }
-    @Given("^([A-Za-z0-9]+): read ([A-Z]?)-([A-Z]?)$")
-    public void read_range(String txName, String l, String r) throws Exception {
-        System.err.println(txName + " READ RANGE " + l + "-" + r);
-        String predL = "".equals(l) ? null : " '" + l + "' <= pk";
-        String predR = "".equals(r) ? null : " pk <= '" + r + "'";
+    @Given("{txName}: read {range}")
+    public void read_range(String txName, ScanRange range) throws Exception {
+        System.err.println(txName + " READ RANGE " + range);
+        String predL = range.l == null ? null : (" '" + range.l.point + "' " + (range.l.open ? "<" : "<=") + " pk");
+        String predR = range.r == null ? null : (" pk " + (range.r.open ? "<" : "<=") + " '" + range.r.point + "'");
         String pred;
         if (predL == null && predR == null) {
-            throw new IllegalArgumentException("use read full for full scan");
+            pred = "";
         } else if (predL == null) {
             pred = " WHERE" + predR;
         } else if (predR == null) {
@@ -242,58 +294,54 @@ public class StepDefs extends DbTestTableTester {
         var tx = getTx(txName);
         executeQuery(tx, "SELECT COUNT(*) FROM " + TEST + pred);
     }
-    @Given("^([A-Za-z0-9]+): read ([A-Z])$")
+    @Given("{txName}: read {key}")
     public void read_point(String txName, String key) throws Exception {
         System.err.println(txName + " READ POINT " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
         executeQuery(tx, "SELECT COUNT(*) FROM " + TEST + " WHERE pk = '" + key + "'");
     }
-    @Given("{word}: (write )insert {word}")
+    @Given("{txName}: (write )insert {key}")
     public void write_insert(String txName, String key) throws Exception {
         System.err.println(txName + " INSERT " + key);
-        if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
         String newVal = key + txName.charAt(txName.length() - 1);
         executeStatement(tx, "INSERT INTO " + TEST + "(pk, val) VALUES('" + key + "', '" + newVal + "')");
     }
-    @Given("{word}: (write )upsert {word}")
+    @Given("{txName}: (write )upsert {key}")
     public void write_upsert(String txName, String key) throws Exception {
         System.err.println(txName + " UPSERT " + key);
-        if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
         String newVal = key + txName.charAt(txName.length() - 1);
         executeStatement(tx, "INSERT OR REPLACE INTO " + TEST + "(pk, val) VALUES('" + key + "', '" + newVal + "')");
     }
-    @Given("{word}: (write )update {word}")
+    @Given("{txName}: (write )update {key}")
     public void write_update(String txName, String key) throws Exception {
         System.err.println(txName + " UPDATE " + key);
-        if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
         String newVal = key + txName.charAt(txName.length() - 1);
-        executeStatement(tx, "UPDATE " + TEST + " SET val = " + newVal + "' WHERE pk = '" + key + "'");
+        executeStatement(tx, "UPDATE " + TEST + " SET val = '" + newVal + "' WHERE pk = '" + key + "'");
     }
-    @Given("{word}: (write )delete {word}")
+    @Given("{txName}: (write )delete {key}")
     public void write_delete(String txName, String key) throws Exception {
         System.err.println(txName + " DELETE " + key);
-        if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
         executeStatement(tx, "DELETE FROM " + TEST + " WHERE pk = '" + key + "'");
     }
-    @Given("prepare THE table with data:{}")
-    public void prepare_the_table(String data) throws Exception {
-        System.err.println("PREPARE TABLE " + data);
+    @Given("prepare THE empty table")
+    public void prepare_the_empty_table() throws Exception {
+        prepare_the_table(List.of());
+    }
+    @Given("prepare THE table with data:{dataset}")
+    public void prepare_the_table_with_data(List<String> dataset) throws Exception {
+        prepare_the_table(dataset);
+    }
+    public void prepare_the_table(List<String> dataset) throws Exception {
+        System.err.println("PREPARE TABLE " + dataset);
         try (var tx = getSession().createTransaction(TgTxOption.ofOCC())) {
             executeStatement(tx, "DELETE FROM " + TEST);
-            for (int i = 0; i < data.length(); i++) {
-                char c = data.charAt(i);
-                if ('A' <= c && c <= 'Z') {
-                    executeStatement(tx, "INSERT OR REPLACE INTO " + TEST + "(pk, val) VALUES('" + c + "', '" + c + "')");
-                } else if (c == ' ') {
-                    // skip
-                } else {
-                    System.err.println("invalid key:" + c);
-                }
+            for (String c : dataset) {
+                executeStatement(tx, "INSERT OR REPLACE INTO " + TEST + "(pk, val) VALUES('" + c + "', '" + c + "')");
             }
             tx.commit(TgCommitType.DEFAULT);
         }

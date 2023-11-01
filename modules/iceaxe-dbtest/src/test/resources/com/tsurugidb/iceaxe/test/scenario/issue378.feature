@@ -1,5 +1,5 @@
 Feature: case_from_378
-    Scenario: case_1_initial
+    Scenario: issue378_case_1_initial
     Given prepare THE table with data: A
     When Tx1: begin ltx
     And  Tx1: read full
@@ -10,7 +10,7 @@ Feature: case_from_378
     Then Tx1: commit will ok
     And  Tx2: commit will fail
 
-    Scenario: case_1_empty_fullscan
+    Scenario: issue378_case_1_empty_fullscan
     Given prepare THE table with data: 
     When Tx1: begin ltx
     And  Tx1: read full
@@ -21,7 +21,7 @@ Feature: case_from_378
     Then Tx1: commit will ok
     And  Tx2: commit will fail
 
-    Scenario: case_2
+    Scenario: issue378_case_2
     Given prepare THE table with data: 
     When Tx1: begin ltx
     And  Tx1: read A
@@ -32,7 +32,7 @@ Feature: case_from_378
     Then Tx1: commit will ok
     And  Tx2: commit will fail
 
-    Scenario: case_2_rev
+    Scenario: issue378_case_2_rev
     Given prepare THE table with data: 
     When Tx1: begin ltx
     And  Tx1: read A
@@ -44,7 +44,7 @@ Feature: case_from_378
     And  Tx1: commit will ok
     And  Tx2: commit-wait returns fail
 
-    Scenario: case_3
+    Scenario: issue378_case_3
     Given prepare THE table with data: ABCDEF
     When Tx1: begin ltx
     And  Tx1: read A

@@ -1,5 +1,5 @@
 Feature: case_from_429
-    Scenario: case_000_429
+    Scenario: issue_429_original
     Given prepare THE table with data: 
     When Tx1: begin ltx
     And  Tx1: read full
