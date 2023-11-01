@@ -18,6 +18,8 @@ import io.cucumber.java.BeforeAll;
 import io.cucumber.java.Scenario;
 import io.cucumber.java.en.Given;
 
+import com.tsurugidb.iceaxe.sql.result.TsurugiQueryResult;
+import com.tsurugidb.iceaxe.sql.result.TsurugiStatementResult;
 import com.tsurugidb.iceaxe.test.util.DbTestTableTester;
 import com.tsurugidb.iceaxe.transaction.exception.TsurugiTransactionException;
 import com.tsurugidb.iceaxe.transaction.option.TgTxOption;
@@ -74,6 +76,16 @@ public class StepDefs extends DbTestTableTester {
     private static void createTable() throws IOException, InterruptedException {
         executeDdl(getSession(), "CREATE TABLE " + TEST + "(pk CHAR(1) PRIMARY KEY, val VARCHAR(2))", TEST);
     }
+    private TsurugiStatementResult executeStatement(TsurugiTransaction tx, String sql) throws IOException, InterruptedException, TsurugiTransactionException {
+        try (var statement = getSession().createStatement(sql)) {
+            return tx.executeStatement(statement);
+        }
+    }
+    private TsurugiQueryResult<?> executeQuery(TsurugiTransaction tx, String sql) throws IOException, InterruptedException, TsurugiTransactionException {
+        try (var query = getSession().createQuery(sql)) {
+            return tx.executeQuery(query);
+        }
+    }
     @After
     public void after() throws Exception {
         for (var e : txs.entrySet()) {
@@ -81,6 +93,7 @@ public class StepDefs extends DbTestTableTester {
             System.err.println(e.getKey() + " discard");
             if (txst.commitDone != null) {
                 txst.commitDone.get();
+                txst.tx.close();
             } else {
                 txst.tx.rollback();
                 txst.tx.close();
@@ -200,104 +213,90 @@ public class StepDefs extends DbTestTableTester {
         }
     }
 
+    // key: [A-Z]
+    // txName: [A-Za-z0-9]+
+    // range: full|[\[(]([A-Z]|-?inf)[-,:]([A-Z]|\+?inf[\])]|[A-Z]?-[A-Z]?
+
     // this issue
     @Given("{word}: read full")
     public void read_full(String txName) throws Exception {
         System.err.println(txName + " READ FULL");
         var tx = getTx(txName);
-        var sql = getSession().createQuery("SELECT COUNT(*) FROM " + TEST);
-        tx.executeQuery(sql);
+        executeQuery(tx, "SELECT COUNT(*) FROM " + TEST);
     }
     @Given("^([A-Za-z0-9]+): read ([A-Z]?)-([A-Z]?)$")
     public void read_range(String txName, String l, String r) throws Exception {
         System.err.println(txName + " READ RANGE " + l + "-" + r);
+        String predL = "".equals(l) ? null : " '" + l + "' <= pk";
+        String predR = "".equals(r) ? null : " pk <= '" + r + "'";
         String pred;
-        if ("".equals(l)) {
-            if ("".equals(r)) {
-                throw new IllegalArgumentException("use read full for full scan");
-            }
-            pred = "WHERE pk <= '" + r + "'";
+        if (predL == null && predR == null) {
+            throw new IllegalArgumentException("use read full for full scan");
+        } else if (predL == null) {
+            pred = " WHERE" + predR;
+        } else if (predR == null) {
+            pred = " WHERE" + predL;
         } else {
-            if ("".equals(r)) {
-                pred = " WHERE '" + l + "' <= pk";
-            } else {
-                pred = " WHERE '" + l + "' <= pk AND pk <= '" + r + "'";
-            }
+            pred = " WHERE" + predL + " AND" + predR;
         }
         var tx = getTx(txName);
-        var sql = getSession().createQuery("SELECT COUNT(*) FROM " + TEST + " " + pred);
-        tx.executeQuery(sql);
+        executeQuery(tx, "SELECT COUNT(*) FROM " + TEST + pred);
     }
     @Given("^([A-Za-z0-9]+): read ([A-Z])$")
     public void read_point(String txName, String key) throws Exception {
         System.err.println(txName + " READ POINT " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
-        var sql = getSession().createQuery(
-            "SELECT COUNT(*) FROM " + TEST + " WHERE pk = '" + key + "'"
-            );
-        tx.executeQuery(sql);
+        executeQuery(tx, "SELECT COUNT(*) FROM " + TEST + " WHERE pk = '" + key + "'");
     }
     @Given("{word}: (write )insert {word}")
     public void write_insert(String txName, String key) throws Exception {
         System.err.println(txName + " INSERT " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
-        var sql = getSession().createStatement(
-            "INSERT INTO " + TEST + "(pk, val) VALUES('" + key + "', '" + key + txName.substring(txName.length() - 1, txName.length()) + "')"
-            );
-        tx.executeStatement(sql);
+        String newVal = key + txName.charAt(txName.length() - 1);
+        executeStatement(tx, "INSERT INTO " + TEST + "(pk, val) VALUES('" + key + "', '" + newVal + "')");
     }
     @Given("{word}: (write )upsert {word}")
     public void write_upsert(String txName, String key) throws Exception {
-        System.err.println(txName + " INSERT " + key);
+        System.err.println(txName + " UPSERT " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
-        var sql = getSession().createStatement(
-            "INSERT OR REPLACE INTO " + TEST + "(pk, val) VALUES('" + key + "', '" + key + txName.substring(txName.length() - 1, txName.length()) + "')"
-            );
-        tx.executeStatement(sql);
+        String newVal = key + txName.charAt(txName.length() - 1);
+        executeStatement(tx, "INSERT OR REPLACE INTO " + TEST + "(pk, val) VALUES('" + key + "', '" + newVal + "')");
     }
     @Given("{word}: (write )update {word}")
     public void write_update(String txName, String key) throws Exception {
-        System.err.println(txName + " INSERT " + key);
+        System.err.println(txName + " UPDATE " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
-        var sql = getSession().createStatement(
-            "UPDATE " + TEST + " SET val = " + key + txName.substring(txName.length() - 1, txName.length()) + "' WHERE pk = '" + key + "'"
-            );
-        tx.executeStatement(sql);
+        String newVal = key + txName.charAt(txName.length() - 1);
+        executeStatement(tx, "UPDATE " + TEST + " SET val = " + newVal + "' WHERE pk = '" + key + "'");
     }
     @Given("{word}: (write )delete {word}")
     public void write_delete(String txName, String key) throws Exception {
         System.err.println(txName + " DELETE " + key);
         if (!key.matches("^[A-Z]$")) throw new IllegalArgumentException("key:" + key + " is invalid");
         var tx = getTx(txName);
-        var sql = getSession().createStatement(
-            "DELETE FROM " + TEST + " WHERE pk = '" + key + "'"
-            );
-        tx.executeStatement(sql);
+        executeStatement(tx, "DELETE FROM " + TEST + " WHERE pk = '" + key + "'");
     }
     @Given("prepare THE table with data:{}")
-    public void prepare_table(String data) throws Exception {
+    public void prepare_the_table(String data) throws Exception {
         System.err.println("PREPARE TABLE " + data);
-        var tx = getSession().createTransaction(TgTxOption.ofOCC());
-        var sql = getSession().createStatement("DELETE FROM " + TEST);
-        tx.executeStatement(sql);
-        for (int i = 0; i < data.length(); i++) {
-            char c = data.charAt(i);
-            if ('A' <= c && c <= 'Z') {
-                sql = getSession().createStatement(
-                    "INSERT OR REPLACE INTO " + TEST + "(pk, val) VALUES('" + c + "', '" + c + "0')"
-                    );
-                tx.executeStatement(sql);
-            } else if (c == ' ') {
-                // skip
-            } else {
-                System.err.println("invalid key:" + c);
+        try (var tx = getSession().createTransaction(TgTxOption.ofOCC())) {
+            executeStatement(tx, "DELETE FROM " + TEST);
+            for (int i = 0; i < data.length(); i++) {
+                char c = data.charAt(i);
+                if ('A' <= c && c <= 'Z') {
+                    executeStatement(tx, "INSERT OR REPLACE INTO " + TEST + "(pk, val) VALUES('" + c + "', '" + c + "')");
+                } else if (c == ' ') {
+                    // skip
+                } else {
+                    System.err.println("invalid key:" + c);
+                }
             }
+            tx.commit(TgCommitType.DEFAULT);
         }
-        tx.commit(TgCommitType.DEFAULT);
     }
 
 }
