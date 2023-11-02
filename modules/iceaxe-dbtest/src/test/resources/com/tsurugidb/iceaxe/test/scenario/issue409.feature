@@ -1,10 +1,10 @@
 Feature: issue_409
     Scenario Outline: normal_order
     Given prepare THE table with data: <initial>
-    When Tx1: begin ltx
+    When Tx1: begin ltx wp
     And  Tx1: read <Tx1R>
     And  Tx1: write <Tx1W>
-    And  Tx2: begin ltx
+    And  Tx2: begin ltx wp
     And  Tx2: read <Tx2R>
     And  Tx2: write <Tx2W>
     Then Tx1: commit will <Tx1C>
@@ -22,10 +22,10 @@ Feature: issue_409
 
     Scenario Outline: reverse_order
     Given prepare THE table with data: <initial>
-    When Tx1: begin ltx
+    When Tx1: begin ltx wp
     And  Tx1: read <Tx1R>
     And  Tx1: write <Tx1W>
-    And  Tx2: begin ltx
+    And  Tx2: begin ltx wp
     And  Tx2: read <Tx2R>
     And  Tx2: write <Tx2W>
     Then Tx2: commit will waiting

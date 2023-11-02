@@ -185,7 +185,11 @@ public class StepDefs extends DbTestTableTester {
 
     // SQL
     @Given("{txName}: BEGIN/begin/START/start LTX/ltx/LONG/long")
-    public void start_long_transaction(String txName) throws Exception {
+    public void start_ltx(String txName) throws Exception {
+        startTransaction(txName, TgTxOption.ofLTX(TEST).label(txName));
+    }
+    @Given("{txName}: BEGIN/begin/START/start LTX/ltx/LONG/long wp")
+    public void start_ltx_wp(String txName) throws Exception {
         startTransaction(txName, TgTxOption.ofLTX(TEST).label(txName));
     }
     @Given("{txName}: BEGIN/begin/START/start")
