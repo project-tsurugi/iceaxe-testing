@@ -8,7 +8,7 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.TestInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,12 +65,12 @@ class DbInsertDuplicateTest extends DbTestTableTester {
         executeDdl(getSession(), sql);
     }
 
-    @Test
+    @RepeatedTest(15)
     void occ() throws Exception {
         test(TgTxOption.ofOCC());
     }
 
-    @Test
+    @RepeatedTest(15)
     void ltx() throws Exception {
         test(TgTxOption.ofLTX(TEST, TEST2));
     }
