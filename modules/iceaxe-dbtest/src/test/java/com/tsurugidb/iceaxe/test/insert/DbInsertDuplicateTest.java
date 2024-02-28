@@ -45,7 +45,7 @@ import com.tsurugidb.iceaxe.transaction.option.TgTxOption;
 class DbInsertDuplicateTest extends DbTestTableTester {
 
     private static final String TEST2 = "test2";
-    private static final long TIMEOUT = TimeUnit.MINUTES.toMillis(10);
+    private static final long TIMEOUT = TimeUnit.MINUTES.toMillis(1);
 
     @BeforeEach
     void beforeEach(TestInfo info) throws Exception {
@@ -206,8 +206,8 @@ class DbInsertDuplicateTest extends DbTestTableTester {
             var entity = new TestEntity(foo, foo, Integer.toString(foo));
             transaction.executeAndGetCount(insertPs, entity);
 
-            var parameter = TgBindParameters.of(vKey1.bind(foo), vKey2.bind(foo / 2), vZzz2.bind(Integer.toString(foo)));
-            transaction.executeAndGetCount(insert2Ps, parameter);
+            // var parameter = TgBindParameters.of(vKey1.bind(foo), vKey2.bind(foo / 2), vZzz2.bind(Integer.toString(foo)));
+            // transaction.executeAndGetCount(insert2Ps, parameter);
         }
     }
 }

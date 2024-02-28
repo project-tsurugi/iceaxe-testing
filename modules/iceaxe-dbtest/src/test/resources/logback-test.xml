@@ -42,9 +42,13 @@
   <logger name="com.tsurugidb.tsubakuro.channel.stream.StreamLink" level="TRACE" />
 -->
 
+  <!-- <logger name="com.tsurugidb.iceaxe.transaction.manager.TsurugiTransactionManager" level="trace">
+      <appender-ref ref="STDOUT" />
+  </logger> -->
+
   <root level="INFO">
     <appender-ref ref="STDOUT" />
-    <appender-ref ref="SUMMARY" />
-    <appender-ref ref="DETAIL" />
+    <!-- <appender-ref ref="SUMMARY" />
+    <appender-ref ref="DETAIL" /> -->
   </root>
 </configuration>
