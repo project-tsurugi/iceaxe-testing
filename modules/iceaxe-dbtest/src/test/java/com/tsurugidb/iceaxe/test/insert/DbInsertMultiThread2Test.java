@@ -57,9 +57,8 @@ class DbInsertMultiThread2Test extends DbTestTableTester {
                 + "(" //
                 + "  key1 int," //
                 + "  key2 bigint," //
-                + "  key3 date," //
                 + "  value1 varchar(10)," //
-                + "  primary key(key1, key2, key3)" //
+                + "  primary key(key1, key2)" //
                 + ")";
         executeDdl(getSession(), sql);
     }
@@ -140,11 +139,10 @@ class DbInsertMultiThread2Test extends DbTestTableTester {
         var key1 = TgBindVariable.ofInt("key1");
         var deleteSql = "delete from " + TEST2 + " where key1=" + key1;
         var deleteMapping = TgParameterMapping.of(key1);
-        var insertSql = "insert into " + TEST2 + "(key1,key2,key3,value1) values(:key1,:key2,:key3,:value1)";
+        var insertSql = "insert into " + TEST2 + "(key1,key2,value1) values(:key1,:key2,:value1)";
         var insertMapping = TgParameterMapping.of(Test2Entity.class) //
                 .addInt("key1", Test2Entity::getKey1) //
                 .addLong("key2", Test2Entity::getKey2) //
-                .addDate("key3", Test2Entity::getKey3) //
                 .addString("value1", Test2Entity::getValue1);
 
         var excptionList = new ArrayList<Exception>();
