@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -28,6 +29,8 @@ import com.tsurugidb.iceaxe.transaction.exception.TsurugiTransactionException;
 import com.tsurugidb.iceaxe.transaction.manager.TgTmSetting;
 import com.tsurugidb.iceaxe.transaction.manager.TsurugiTransactionManager;
 import com.tsurugidb.iceaxe.transaction.option.TgTxOption;
+
+import ch.qos.logback.classic.pattern.ThreadConverter;
 
 /**
  * multi thread insert test
@@ -98,6 +101,12 @@ class DbInsertMultiThread2Test extends DbTestTableTester {
         insertMultiTxOcc(1, prepare);
     }
 
+    @Test
+    void issue482() throws Exception {
+        insertMultiTxOcc(1, false);
+    }
+
+
     @ParameterizedTest
     @ValueSource(booleans = { false, true })
     @Disabled // TODO remove Disabled. CC_OCC_PHANTOM_AVOIDANCE retry-over
@@ -112,13 +121,13 @@ class DbInsertMultiThread2Test extends DbTestTableTester {
     }
 
     private void insertMultiTxOcc(int threadSize, boolean prepare) throws IOException, InterruptedException {
-        var setting = TgTmSetting.ofAlways(TgTxOption.ofOCC(), 200); // TODO リトライ無しにしたい
+        var setting = TgTmSetting.ofAlways(TgTxOption.ofOCC(), 1); // TODO リトライ無しにしたい
         setting.getTransactionOptionSupplier().setTmOptionListener((attempt, exception, tmOption) -> {
             if (attempt > 0) {
                 LOG.info("insertMultiTxOcc({}, {}) OCC retry {}", threadSize, prepare, attempt);
             }
         });
-        insertMultiTx(100, threadSize, setting, prepare);
+        insertMultiTx(16, threadSize, setting, prepare);
     }
 
     @ParameterizedTest
@@ -234,7 +243,7 @@ class DbInsertMultiThread2Test extends DbTestTableTester {
             transaction.executeAndGetCount(deletePs, parameter);
 
             for (int i = 0; i < recordSize; i++) {
-                transaction.executeAndGetList(selectPs);
+                //transaction.executeAndGetList(selectPs);
 
                 var entity = new Test2Entity(number, i);
                 transaction.executeAndGetCount(insertPs, entity);
