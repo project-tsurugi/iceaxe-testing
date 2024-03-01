@@ -179,6 +179,7 @@ class DbInsertDuplicateTest extends DbTestTableTester {
                             LOG.info("loop {} (i={}/{} (+{}))", j, i, ATTEMPT_SIZE, i - prev);
                         }
                         prev = i;
+//                        Thread.sleep(30000);
                     }
                     try {
                         tm.execute(transaction -> {
@@ -206,8 +207,8 @@ class DbInsertDuplicateTest extends DbTestTableTester {
             var entity = new TestEntity(foo, foo, Integer.toString(foo));
             transaction.executeAndGetCount(insertPs, entity);
 
-            // var parameter = TgBindParameters.of(vKey1.bind(foo), vKey2.bind(foo / 2), vZzz2.bind(Integer.toString(foo)));
-            // transaction.executeAndGetCount(insert2Ps, parameter);
+            var parameter = TgBindParameters.of(vKey1.bind(foo), vKey2.bind(foo / 2), vZzz2.bind(Integer.toString(foo)));
+            transaction.executeAndGetCount(insert2Ps, parameter);
         }
     }
 }
