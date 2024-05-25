@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.tsurugidb.iceaxe.sql.TgDataType;
 import com.tsurugidb.iceaxe.sql.parameter.TgBindParameters;
@@ -79,6 +81,29 @@ class DbTimestampTest extends DbTestTableTester {
     private static void assertColumn(String name, TgDataType type, SqlCommon.Column actual) {
         assertEquals(name, actual.getName());
         assertEquals(type.getLowDataType(), actual.getAtomType());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "2024-05-24T23:45:56.123456789", "0001-01-01T00:00:00",
+            // TODO "0001-01-01T00:00:01", fix time zone serde
+            "0001-01-01T00:00:00.000000001", "1970-01-01T00:00:00",
+            // TODO "1969-12-31T00:00:01", fix time zone serde
+            "9999-12-31T23:59:59.999999999", "-999999999-01-01T00:00:00", "+99999999-12-31T23:59:59.999999999" })
+    void value(String s) throws Exception {
+        var expected = LocalDateTime.parse(s);
+
+        var variable = TgBindVariable.ofDateTime("value");
+        var updateSql = "update " + TEST + " set value=" + variable + " where pk=1";
+        var updateMapping = TgParameterMapping.of(variable);
+        var updateParameter = TgBindParameters.of(variable.bind(expected));
+
+        var session = getSession();
+        var tm = createTransactionManagerOcc(session);
+        int count = tm.executeAndGetCount(updateSql, updateMapping, updateParameter);
+        assertEquals(1, count);
+
+        var actual = tm.executeAndFindRecord("select * from " + TEST + " where pk=1").get();
+        assertEquals(expected, actual.getDateTime("value"));
     }
 
     @Test
