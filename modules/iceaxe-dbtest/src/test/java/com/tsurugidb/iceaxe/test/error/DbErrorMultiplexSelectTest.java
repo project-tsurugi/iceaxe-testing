@@ -1,6 +1,7 @@
 package com.tsurugidb.iceaxe.test.error;
 
 import java.io.IOException;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,11 @@ class DbErrorMultiplexSelectTest extends DbTestTableTester {
                 }
             }
             if (DbTestConnector.isIpc()) {
+                if (size > 280) {
+                    assertEqualsCode(Set.of(SqlServiceCode.TRANSACTION_EXCEEDED_LIMIT_EXCEPTION, SqlServiceCode.SQL_LIMIT_REACHED_EXCEPTION), e);
+                    LOG.info("(IPC){} occur. size={}, type={}", e.getDiagnosticCode(), size, type);
+                    return;
+                }
                 if (size > 240) {
                     assertEqualsCode(SqlServiceCode.SQL_LIMIT_REACHED_EXCEPTION, e);
                     assertContains("creating output channel failed (maybe too many requests)", e.getMessage());

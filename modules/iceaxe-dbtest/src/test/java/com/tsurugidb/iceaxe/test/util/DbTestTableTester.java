@@ -2,12 +2,14 @@ package com.tsurugidb.iceaxe.test.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -464,6 +466,22 @@ public class DbTestTableTester {
         }
     }
 
+    protected static void assertEqualsCode(Set<DiagnosticCode> expected, Throwable actual) {
+        try {
+            var code = findDiagnosticCode(actual);
+            if (expected.contains(code)) {
+                return;
+            }
+            fail(String.format("expected: %s but was: %s", expected, actual));
+        } catch (Throwable e) {
+            var log = LoggerFactory.getLogger(DbTestTableTester.class);
+            log.error("assertEqualsCode fail. {}", e.getMessage(), actual);
+
+            e.addSuppressed(actual);
+            throw e;
+        }
+    }
+
     protected static DiagnosticCode findDiagnosticCode(Throwable t) {
         {
             var e = findTsurugiDiagnosticCodeProvider(t);
@@ -523,6 +541,13 @@ public class DbTestTableTester {
 
     private static String toCamelCase(String snakeCase) {
         return Arrays.stream(snakeCase.split("_")).map(s -> Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase()).collect(Collectors.joining());
+    }
+
+    protected static void assertErrorTableNotFound(String expectedTableName, Exception actual) {
+        assertEqualsCode(SqlServiceCode.SYMBOL_ANALYZE_EXCEPTION, actual);
+
+        String expected = "compile failed with error:symbol_not_found message:\"symbol '" + expectedTableName + "' is not found\" location:<input>:";
+        assertContains(expected, actual.getMessage());
     }
 
     protected static void assertEqualsTestTable(TestEntity... expected) throws IOException, InterruptedException {

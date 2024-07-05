@@ -1,5 +1,6 @@
 package com.tsurugidb.iceaxe.test.table;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,8 +61,8 @@ class DbCreateTableTest extends DbTestTableTester {
         var e = assertThrowsExactly(TsurugiTmIOException.class, () -> {
             tm.executeDdl(SQL);
         });
-        assertEqualsCode(SqlServiceCode.COMPILE_EXCEPTION, e);
-        assertContains("compile failed with error:duplicate_table message:\"table `" + TEST + "' is already defined\" location:(unknown)", e.getMessage());
+        assertEqualsCode(SqlServiceCode.SYMBOL_ANALYZE_EXCEPTION, e);
+        assertContains("compile failed with error:table_already_exists message:\"table is already defined: " + TEST + "\" location:<input>:", e.getMessage());
     }
 
     @Test
@@ -86,8 +87,8 @@ class DbCreateTableTest extends DbTestTableTester {
         try (var ps = session.createStatement(CREATE_TEST_SQL, TgParameterMapping.of())) {
             try (var transaction = session.createTransaction(txOption)) {
                 var e = assertThrowsExactly(TsurugiIOException.class, () -> transaction.executeAndGetCount(ps, TgBindParameters.of()));
-                assertEqualsCode(SqlServiceCode.COMPILE_EXCEPTION, e);
-                assertContains("compile failed with error:duplicate_table message:\"table `" + TEST + "' is already defined\" location:(unknown)", e.getMessage());
+                assertEqualsCode(SqlServiceCode.SYMBOL_ANALYZE_EXCEPTION, e);
+                assertContains("compile failed with error:table_already_exists message:\"table is already defined: " + TEST + "\" location:<input>:", e.getMessage());
                 transaction.rollback();
             }
         }
@@ -207,5 +208,42 @@ class DbCreateTableTest extends DbTestTableTester {
         assertTrue(existsTable(TEST));
         tm.executeDdl(sql);
         assertTrue(existsTable(TEST));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 1, 0, -1 })
+    void defaultValue(int defaultValue) throws Exception {
+        var sql = "create table " + TEST + "(" //
+                + " foo int primary key," //
+                + " bar bigint default " + defaultValue + "," //
+                + " zzz varchar(10) default 'd" + defaultValue + "'" //
+                + ")";
+
+        var tm = createTransactionManagerOcc(getSession());
+        tm.executeDdl(sql);
+
+        tm.executeAndGetCount("insert into " + TEST + " values(1,11,'a')");
+        tm.executeAndGetCount("insert into " + TEST + "(foo) values(2)");
+        tm.executeAndGetCount("insert into " + TEST + "(foo, bar) values(3, 33)");
+        tm.executeAndGetCount("insert into " + TEST + "(foo, zzz) values(4, '444')");
+
+        var list = selectAllFromTest();
+        assertEquals(4, list.size());
+        var entity0 = list.get(0);
+        assertEquals(1, entity0.getFoo());
+        assertEquals(11L, entity0.getBar());
+        assertEquals("a", entity0.getZzz());
+        var entity1 = list.get(1);
+        assertEquals(2, entity1.getFoo());
+        assertEquals(defaultValue, entity1.getBar());
+        assertEquals("d" + defaultValue, entity1.getZzz());
+        var entity2 = list.get(2);
+        assertEquals(3, entity2.getFoo());
+        assertEquals(33L, entity2.getBar());
+        assertEquals("d" + defaultValue, entity2.getZzz());
+        var entity3 = list.get(3);
+        assertEquals(4, entity3.getFoo());
+        assertEquals(defaultValue, entity3.getBar());
+        assertEquals("444", entity3.getZzz());
     }
 }

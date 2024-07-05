@@ -1,6 +1,7 @@
 package com.tsurugidb.iceaxe.test.type;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -22,9 +23,11 @@ import com.tsurugidb.iceaxe.sql.parameter.TgParameterMapping;
 import com.tsurugidb.iceaxe.sql.result.TgResultMapping;
 import com.tsurugidb.iceaxe.sql.result.TsurugiResultEntity;
 import com.tsurugidb.iceaxe.test.util.DbTestTableTester;
+import com.tsurugidb.iceaxe.transaction.manager.exception.TsurugiTmIOException;
 import com.tsurugidb.sql.proto.SqlCommon;
 import com.tsurugidb.tsubakuro.kvs.KvsClient;
 import com.tsurugidb.tsubakuro.kvs.RecordBuffer;
+import com.tsurugidb.tsubakuro.sql.SqlServiceCode;
 
 /**
  * decimal(5,1) test
@@ -86,6 +89,40 @@ class DbDecimal1Test extends DbTestTableTester {
     private static void assertColumn(String name, TgDataType type, SqlCommon.Column actual) {
         assertEquals(name, actual.getName());
         assertEquals(type.getLowDataType(), actual.getAtomType());
+    }
+
+    @Test
+    void insertLiteral() throws Exception {
+        var tm = createTransactionManagerOcc(getSession());
+        tm.executeAndGetCount("insert into " + TEST + " values(" + (SIZE + 1) + ", 1)");
+        tm.executeAndGetCount("insert into " + TEST + " values(" + (SIZE + 2) + ", 2.1)");
+//      tm.executeAndGetCount("insert into " + TEST + " values(" + (SIZE + 3) + ", 3e2)");
+
+        var list = tm.executeAndGetList("select * from " + TEST + " where pk>" + SIZE + " order by pk");
+        assertEquals(2, list.size());
+        assertEquals(new BigDecimal("1.0"), list.get(0).getDecimal("value"));
+        assertEquals(new BigDecimal("2.1"), list.get(1).getDecimal("value"));
+//      assertEquals(new BigDecimal("300.0"), list.get(2).getDecimal("value"));
+    }
+
+    @Test
+    void insertLiteralE() throws Exception {
+        var tm = createTransactionManagerOcc(getSession());
+        var e = assertThrowsExactly(TsurugiTmIOException.class, () -> {
+            tm.executeAndGetCount("insert into " + TEST + " values(" + (SIZE + 3) + ", 3e2)");
+        });
+        assertEqualsCode(SqlServiceCode.UNSUPPORTED_RUNTIME_FEATURE_EXCEPTION, e);
+        assertContains("unsupported type conversion source:float8 target:decimal", e.getMessage());
+    }
+
+    @Test
+    void insertLiteralECast() throws Exception {
+        var tm = createTransactionManagerOcc(getSession());
+        tm.executeAndGetCount("insert into " + TEST + " values(" + (SIZE + 3) + ", cast(3e2 as decimal))");
+
+        var list = tm.executeAndGetList("select * from " + TEST + " where pk>" + SIZE + " order by pk");
+        assertEquals(1, list.size());
+        assertEquals(new BigDecimal("300.0"), list.get(0).getDecimal("value"));
     }
 
     @Test
