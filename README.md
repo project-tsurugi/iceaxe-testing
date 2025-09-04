@@ -42,7 +42,7 @@ cd iceaxe-testing
 -Pdbtest.credentials=/path/to/credential-file
 ```
 
-For tests other than credential, specifying only one of `--user`, `--auth-token`, or `--credentials` is sufficient. If none of these are specified, authentication will be performed using the user `tsurugi`.
+For tests other than credential, specifying only one of `user`, `auth-token`, or `credentials` is sufficient. If none of these are specified, authentication will be performed using the user `tsurugi`.
 
 In the credential test, anything not specified is skipped.
 
