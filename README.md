@@ -35,7 +35,7 @@ cd iceaxe-testing
 ### Execute with credential
 
 ```bash
-./graglew test \
+./gradlew test \
 -Pdbtest.user=user \
 -Pdbtest.password=password \
 -Pdbtest.auth-token=token \
