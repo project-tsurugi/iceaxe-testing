@@ -1,5 +1,9 @@
 # iceaxe-testing - Iceaxe test
 
+> [!WARNING]
+> This repository has been archived as it has been migrated to the [iceaxe](https://github.com/project-tsurugi/iceaxe) repository.
+> For more details, see https://github.com/project-tsurugi/iceaxe/pull/48
+
 ## Requirements
 
 * Java `>= 11`
